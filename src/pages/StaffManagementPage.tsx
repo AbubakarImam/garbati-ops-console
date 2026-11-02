@@ -71,9 +71,20 @@ function CreateStaffForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+const DEFAULT_PAGE_SIZE = 20;
+
 export function StaffManagementPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useQuery({ queryKey: ["staff"], queryFn: () => staffApi.list() });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // StaffListResponse carries page/pageSize/totalCount precisely so the UI can page through more than
+  // one screenful of staff - wired into AntD Table's own pagination prop below rather than fetching
+  // page 1 only and silently hiding anything past it.
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["staff", page, pageSize],
+    queryFn: () => staffApi.list(undefined, page, pageSize),
+  });
 
   const [editingStaff, setEditingStaff] = useState<StaffResponse | null>(null);
   const [draftRole, setDraftRole] = useState<string | undefined>(undefined);
@@ -131,7 +142,21 @@ export function StaffManagementPage() {
       <Card>
         <CreateStaffForm onCreated={invalidate} />
         {error && <ApiErrorAlert error={error} />}
-        <Table rowKey="staffId" loading={isLoading} columns={columns} dataSource={data?.items ?? []} pagination={false} />
+        <Table
+          rowKey="staffId"
+          loading={isLoading}
+          columns={columns}
+          dataSource={data?.items ?? []}
+          pagination={{
+            current: page,
+            pageSize,
+            total: data?.totalCount ?? 0,
+            onChange: (nextPage, nextPageSize) => {
+              setPage(nextPage);
+              setPageSize(nextPageSize);
+            },
+          }}
+        />
       </Card>
 
       <Modal

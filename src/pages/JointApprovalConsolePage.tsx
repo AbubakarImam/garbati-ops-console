@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Button, Input, Modal, Space, Table, Tag, Typography } from "antd";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { jointApprovalsApi } from "../api/endpoints";
 import { ApiErrorAlert } from "../components/ApiErrorAlert";
 import { useAuth } from "../auth/AuthContext";
@@ -21,10 +21,17 @@ export function JointApprovalConsolePage() {
   const canAct = roleCan(user?.role, ROLE_MATRIX.decideJointApproval);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  // The backend pages this with an opaque cursor (nextPageToken), not a page number/total count
+  // (PagedResponse<T> - Garbati.OpsApi mirroring IdentityApi's own T-031 shape) - useInfiniteQuery is
+  // TanStack Query's own tool for exactly this shape, rather than fetching page one and silently
+  // dropping everything after it.
+  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["joint-approvals"],
-    queryFn: () => jointApprovalsApi.listPending(),
+    queryFn: ({ pageParam }) => jointApprovalsApi.listPending(20, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken ?? undefined,
   });
+  const items = data?.pages.flatMap((page) => page.items) ?? [];
 
   const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
@@ -79,7 +86,12 @@ export function JointApprovalConsolePage() {
         description="A real joint-account holder would approve from their own device. This screen lets ops staff drive the same approval endpoint for demo/QA purposes only."
       />
       {error && <ApiErrorAlert error={error} />}
-      <Table rowKey="requestId" loading={isLoading} columns={columns} dataSource={data?.items ?? []} pagination={false} />
+      <Table rowKey="requestId" loading={isLoading} columns={columns} dataSource={items} pagination={false} />
+      {hasNextPage && (
+        <Button style={{ marginTop: 16 }} loading={isFetchingNextPage} onClick={() => fetchNextPage()}>
+          Load more
+        </Button>
+      )}
       {canAct && (
         <Modal
           title="Approve joint-account request"
