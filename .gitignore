@@ -31,3 +31,6 @@ pnpm-debug.log*
 
 # Vite
 *.local
+
+# TypeScript incremental build cache (tsc -b)
+*.tsbuildinfo
